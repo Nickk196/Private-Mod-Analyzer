@@ -1,235 +1,393 @@
 # ==============================================================================
-# MECZ FORENSIC MOD ANALYZER (FIXED CRASH)
+# MECZ MOD ANALYZER (PRO EDITION)
+# Features: Deep Jar Scan, Modrinth/Megabase Verification, Hash Checking
 # ==============================================================================
 
-Add-Type -AssemblyName PresentationFramework
-Add-Type -AssemblyName System.Windows.Forms
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Clear-Host
 
-# --- GUI DEFINITION ---
-[xml]$xaml = @"
-<Window
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Mecz Forensic Tool"
-    Width="900"
-    Height="600"
-    WindowStartupLocation="CenterScreen"
-    ResizeMode="CanMinimize"
-    Background="#1e1e1e"
-    Foreground="White"
-    FontFamily="Segoe UI">
+ $Banner = @"
 
-    <Grid Margin="15">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ██░███░██░███░██░░███░░███░███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  ██░░░░░██░░░░░██░░░██░░░██░░██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  ████░░░░██░░░░░██░░░██░░░██░░█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  ██░███░░██░░░░░██░░░██░░░██░░██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 
-        <!-- Header -->
-        <TextBlock Grid.Row="0" Text="MINECRAFT FORENSIC TOOL" FontSize="22" FontWeight="Bold" Foreground="#00ffcc" Margin="0,0,0,15"/>
-
-        <!-- Controls -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,15">
-            <Button x:Name="BrowseBtn" Content="Browse Folder" Width="120" Height="35" Background="#444" Foreground="White" Margin="0,0,10,0" FontSize="12"/>
-            <Button x:Name="PasteBtn"   Content="PASTE PATH" Width="120" Height="35" Background="#007acc" Foreground="White" Margin="0,0,10,0" FontWeight="Bold" FontSize="12"/>
-            <Button x:Name="AnalyzeBtn" Content="ANALYZE"     Width="120" Height="35" Background="#28a745" Foreground="White" FontWeight="Bold" FontSize="12"/>
-
-            <!-- PATH BOX -->
-            <TextBox x:Name="PathBox" 
-                     Width="440" 
-                     Height="35" 
-                     Background="#333" 
-                     Foreground="White" 
-                     BorderBrush="#555" 
-                     Text="PASTE PATH HERE OR CLICK BROWSE" 
-                     VerticalContentAlignment="Center"
-                     Margin="10,0,0,0"/>
-        </StackPanel>
-
-        <!-- Output Area (Switched to Listbox for stability) -->
-        <Border Grid.Row="2" BorderBrush="#444" BorderThickness="1" Background="#111">
-            <ListBox x:Name="OutputBox" 
-                     Background="#111" 
-                     Foreground="#00ffcc" 
-                     FontFamily="Consolas" 
-                     FontSize="11" 
-                     BorderThickness="0"/>
-        </Border>
-    </Grid>
-</Window>
 "@
 
-# --- LOGIC ---
+Write-Host $Banner -ForegroundColor Magenta
+Write-Host "                          DEEP FORENSIC SCANNER" -ForegroundColor Cyan
+Write-Host "                    Created by Mecz & MeowTonynoh" -ForegroundColor Gray
+Write-Host ("━" * 76) -ForegroundColor DarkMagenta
+Write-Host
 
- $reader = New-Object System.Xml.XmlNodeReader $xaml
- $window = [Windows.Markup.XamlReader]::Load($reader)
+# Get mods directory path from user
+Write-Host "Enter path to the mods folder: " -NoNewline
+Write-Host "(press Enter to use default)" -ForegroundColor DarkGray
+ $modsPath = Read-Host "PATH"
+Write-Host
 
- $BrowseBtn = $window.FindName("BrowseBtn")
- $PasteBtn  = $window.FindName("PasteBtn")
- $AnalyzeBtn = $window.FindName("AnalyzeBtn")
- $OutputBox = $window.FindName("OutputBox")
- $PathBox   = $window.FindName("PathBox")
-
-# Suspicious Keywords (Refined)
- $SuspiciousClients = @("meteor", "liquidbounce", "wurst", "impact", "rise", "future", "tenacity", "vape", "karamel", "gomz")
- $SuspiciousKeywords = @("killaura", "fly", "scaffold", "reach", "autoclicker", "fullbright", "esp", "tracer", "noslow", "inventorymove", "timer", "autotool", "stealer", "rename", "autoeat", "crystalaura", "bedaura")
-
-# Helper to write colored lines (FIXED CRASH)
-function Write-Output {
-    param([string]$text, [string]$color = "White")
-    
-    # Create a TextBlock for each line
-    $tb = New-Object System.Windows.Controls.TextBlock
-    $tb.Text = $text
-    $tb.Foreground = $color # This works on a new object
-    
-    # Add to ListBox
-    $OutputBox.Items.Add($tb)
-    
-    # Auto-scroll to bottom
-    $OutputBox.ScrollIntoView($tb)
+if ([string]::IsNullOrWhiteSpace($modsPath)) {
+    $modsPath = "$env:USERPROFILE\AppData\Roaming\.minecraft\mods"
+    Write-Host "Continuing with " -NoNewline
+    Write-Host $modsPath -ForegroundColor White
+    Write-Host
 }
 
-function Select-Folder {
-    $FolderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-    if ($FolderBrowser.ShowDialog() -eq "OK") {
-        $PathBox.Text = $FolderBrowser.SelectedPath
-    }
+if (-not (Test-Path $modsPath -PathType Container)) {
+    Write-Host "❌ Invalid Path!" -ForegroundColor Red
+    Write-Host "The directory does not exist or is not accessible." -ForegroundColor Yellow
+    Write-Host
+    Write-Host "Press any key to exit..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
 }
 
-function Paste-Clipboard {
+Write-Host "📁 Scanning directory: $modsPath" -ForegroundColor Green
+Write-Host
+
+# Check for running Minecraft instance
+ $mcProcess = Get-Process javaw -ErrorAction SilentlyContinue
+if (-not $mcProcess) {
+    $mcProcess = Get-Process java -ErrorAction SilentlyContinue
+}
+
+if ($mcProcess) {
     try {
-        $ClipboardText = [System.Windows.Forms.Clipboard]::GetText()
-        if (-not [string]::IsNullOrWhiteSpace($ClipboardText)) {
-            $PathBox.Text = $ClipboardText
-        }
-    } catch {}
+        $startTime = $mcProcess.StartTime
+        $uptime = (Get-Date) - $startTime
+        Write-Host "🕒 { Minecraft Uptime }" -ForegroundColor DarkCyan
+        Write-Host "   $($mcProcess.Name) PID $($mcProcess.Id) started at $startTime" -ForegroundColor Gray
+        Write-Host "   Running for: $($uptime.Hours)h $($uptime.Minutes)m $($uptime.Seconds)s" -ForegroundColor Gray
+        Write-Host ""
+    } catch {
+        # Process info unavailable, continue silently
+    }
 }
 
-function Start-Analysis {
-    $TargetPath = $PathBox.Text
+function Get-FileSHA1 {
+    param([string]$Path)
+    return (Get-FileHash -Path $Path -Algorithm SHA1).Hash
+}
 
-    if ([string]::IsNullOrWhiteSpace($TargetPath)) {
-        [System.Windows.MessageBox]::Show("Please enter, paste, or select a path first.")
-        return
+function Get-DownloadSource {
+    param([string]$Path)
+    
+    $zoneData = Get-Content -Raw -Stream Zone.Identifier $Path -ErrorAction SilentlyContinue
+    if ($zoneData -match "HostUrl=(.+)") {
+        $url = $matches[1].Trim()
+        
+        # Parse common download sources
+        if ($url -match "mediafire\.com") { return "MediaFire" }
+        elseif ($url -match "discord\.com|discordapp\.com|cdn\.discordapp\.com") { return "Discord" }
+        elseif ($url -match "dropbox\.com") { return "Dropbox" }
+        elseif ($url -match "drive\.google\.com") { return "Google Drive" }
+        elseif ($url -match "mega\.nz|mega\.co\.nz") { return "MEGA" }
+        elseif ($url -match "github\.com") { return "GitHub" }
+        elseif ($url -match "modrinth\.com") { return "Modrinth" }
+        elseif ($url -match "curseforge\.com") { return "CurseForge" }
+        elseif ($url -match "anydesk\.com") { return "AnyDesk" }
+        elseif ($url -match "doomsdayclient\.com") { return "DoomsdayClient" }
+        elseif ($url -match "prestigeclient\.vip") { return "PrestigeClient" }
+        elseif ($url -match "198macros\.com") { return "198Macros" }
+        else {
+            if ($url -match "https?://(?:www\.)?([^/]+)") {
+                return $matches[1]
+            }
+            return $url
+        }
     }
+    return $null
+}
 
-    if (!(Test-Path $TargetPath)) {
-        [System.Windows.MessageBox]::Show("The path does not exist.`n`nPath: $TargetPath")
-        return
+function Query-Modrinth {
+    param([string]$Hash)
+    
+    try {
+        $versionInfo = Invoke-RestMethod -Uri "https://api.modrinth.com/v2/version_file/$Hash" -Method Get -UseBasicParsing -ErrorAction Stop
+        
+        if ($versionInfo.project_id) {
+            $projectInfo = Invoke-RestMethod -Uri "https://api.modrinth.com/v2/project/$($versionInfo.project_id)" -Method Get -UseBasicParsing -ErrorAction Stop
+            return @{ Name = $projectInfo.title; Slug = $projectInfo.slug }
+        }
+    } catch {
+        # Modrinth lookup failed
     }
+    
+    return @{ Name = ""; Slug = "" }
+}
 
-    $OutputBox.Items.Clear() # Clear previous
-    Write-Output "--- STARTING ANALYSIS ---" "Cyan"
-    Write-Output "Target: $TargetPath" "Gray"
-    Write-Output ""
+function Query-Megabase {
+    param([string]$Hash)
+    
+    try {
+        $result = Invoke-RestMethod -Uri "https://megabase.vercel.app/api/query?hash=$Hash" -Method Get -UseBasicParsing -ErrorAction Stop
+        if (-not $result.error) {
+            return $result.data
+        }
+    } catch {
+        # Megabase unreachable
+    }
+    
+    return $null
+}
 
-    # 1. Check Mods Folder
-    $ModsPath = Join-Path $TargetPath "mods"
-    if (Test-Path $ModsPath) {
-        Write-Output "[1] SCANNING MODS FOLDER..." "Yellow"
-        $Mods = Get-ChildItem -Path $ModsPath -Filter "*.jar" -ErrorAction SilentlyContinue
-        if ($Mods) {
-            foreach ($Mod in $Mods) {
-                $Name = $Mod.Name.ToLower()
-                $IsSuspicious = $false
-                $Reason = ""
+# Cheat/hack pattern database - compiled from known malicious mods
+ $suspiciousPatterns = @(
+    "AimAssist", "AnchorTweaks", "AutoAnchor", "AutoCrystal", "AutoDoubleHand",
+    "AutoHitCrystal", "AutoPot", "AutoTotem", "AutoArmor", "InventoryTotem",
+    "Hitboxes", "JumpReset", "LegitTotem", "PingSpoof", "SelfDestruct",
+    "ShieldBreaker", "TriggerBot", "Velocity", "AxeSpam", "WebMacro",
+    "FastPlace", "WalskyOptimizer", "WalksyOptimizer", "walsky.optimizer", 
+    "WalksyCrystalOptimizerMod", "Donut", "Replace Mod", "Reach",
+    "ShieldDisabler", "SilentAim", "Totem Hit", "Wtap", "FakeLag",
+    "Friends", "NoDelay", "BlockESP", "Krypton", "krypton", "dev.krypton", "Virgin", "AntiMissClick",
+    "LagReach", "PopSwitch", "SprintReset", "ChestSteal", "AntiBot",
+    "ElytraSwap", "FastXP", "FastExp", "Refill", "NoJumpDelay", "AirAnchor",
+    "jnativehook", "FakeInv", "HoverTotem", "AutoClicker", "AutoFirework",
+    "Freecam", "PackSpoof", "Antiknockback", "scrim", "catlean", "Argon",
+    "Discord", "AuthBypass", "Asteria", "Prestige", "AutoEat", "AutoMine",
+    "MaceSwap", "DoubleAnchor", "AutoTPA", "BaseFinder", "Xenon", "gypsy",
+    "Grim", "grim",
+    "org.chainlibs.module.impl.modules.Crystal.Y",
+    "org.chainlibs.module.impl.modules.Crystal.bF",
+    "org.chainlibs.module.impl.modules.Crystal.bM",
+    "org.chainlibs.module.impl.modules.Crystal.bY",
+    "org.chainlibs.module.impl.modules.Crystal.bq",
+    "org.chainlibs.module.impl.modules.Crystal.cv",
+    "org.chainlibs.module.impl.modules.Crystal.o",
+    "org.chainlibs.module.impl.modules.Blatant.I",
+    "org.chainlibs.module.impl.modules.Blatant.bR",
+    "org.chainlibs.module.impl.modules.Blatant.bx",
+    "org.chainlibs.module.impl.modules.Blatant.cj",
+    "org.chainlibs.module.impl.modules.Blatant.dk",
+    "imgui", "imgui.gl3", "imgui.glfw",
+    "BowAim", "Criticals", "Flight", "Fakenick", "FakeItem",
+    "inject", "invsee", "ItemExploit", "Hellion", "hellion",
+    "KeyboardMixin", "ClientPlayerInteractionManagerMixin",
+    "LicenseCheckMixin", "ClientPlayerInteractionManagerAccessor",
+    "ClientPlayerEntityMixim", "dev.gambleclient", "obfuscatedAuth",
+    "phantom-refmap.json", "xyz.greaj",
+    "じ.class", "ふ.class", "ぶ.class", "ぷ.class", "た.class",
+    "ね.class", "そ.class", "な.class", "ど.class", "ぐ.class",
+    "ず.class", "で.class", "つ.class", "べ.class", "せ.class",
+    "と.class", "み.class", "び.class", "す.class", "の.class"
+)
 
-                # Check for Client Names
-                foreach ($client in $SuspiciousClients) {
-                    if ($Name -like "*$client*") { 
-                        $IsSuspicious = $true
-                        $Reason = "Known Client ($client)"
-                        break
+ $verifiedMods = @()
+ $unknownMods = @()
+ $suspiciousMods = @()
+
+try {
+    $jarFiles = Get-ChildItem -Path $modsPath -Filter *.jar -ErrorAction Stop
+} catch {
+    Write-Host "❌ Error accessing directory: $_" -ForegroundColor Red
+    Write-Host "Press any key to exit..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
+}
+
+if ($jarFiles.Count -eq 0) {
+    Write-Host "⚠️  No JAR files found in: $modsPath" -ForegroundColor Yellow
+    Write-Host "Press any key to exit..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 0
+}
+
+Write-Host "🔍 Found $($jarFiles.Count) JAR file(s) to analyze" -ForegroundColor Green
+Write-Host
+
+ $spinnerFrames = @("⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷")
+ $totalFiles = $jarFiles.Count
+ $idx = 0
+
+# Pass 1: Database verification
+foreach ($jar in $jarFiles) {
+    $idx++
+    $spinner = $spinnerFrames[$idx % $spinnerFrames.Length]
+    Write-Host "`r[$spinner] Scanning: $idx/$totalFiles - $($jar.Name)" -ForegroundColor Yellow -NoNewline
+    
+    $hash = Get-FileSHA1 -Path $jar.FullName
+    
+    if ($hash) {
+        $modrinthData = Query-Modrinth -Hash $hash
+        if ($modrinthData.Slug) {
+            $verifiedMods += [PSCustomObject]@{ 
+                ModName = $modrinthData.Name
+                FileName = $jar.Name 
+            }
+            continue
+        }
+        
+        $megabaseData = Query-Megabase -Hash $hash
+        if ($megabaseData.name) {
+            $verifiedMods += [PSCustomObject]@{ 
+                ModName = $megabaseData.Name
+                FileName = $jar.Name 
+            }
+            continue
+        }
+    }
+    
+    $src = Get-DownloadSource $jar.FullName
+    $unknownMods += [PSCustomObject]@{ 
+        FileName = $jar.Name
+        FilePath = $jar.FullName
+        DownloadSource = $src
+    }
+}
+
+Write-Host "`r$(' ' * 100)`r" -NoNewline
+
+# Pass 2: Deep pattern scan on unknown mods
+if ($unknownMods.Count -gt 0) {
+    Write-Host "🔬 Analyzing $($unknownMods.Count) unknown mod(s)..." -ForegroundColor Cyan
+    
+    $idx = 0
+    
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        
+        $pattern = '(' + ($suspiciousPatterns -join '|') + ')'
+        $regex = [regex]::new($pattern, [System.Text.RegularExpressions.RegexOptions]::Compiled)
+        
+        foreach ($mod in $unknownMods) {
+            $idx++
+            $spinner = $spinnerFrames[$idx % $spinnerFrames.Length]
+            Write-Host "`r[$spinner] Checking: $idx/$($unknownMods.Count) - $($mod.FileName)" -ForegroundColor Yellow -NoNewline
+            
+            $detected = [System.Collections.Generic.HashSet[string]]::new()
+            
+            try {
+                $archive = [System.IO.Compression.ZipFile]::OpenRead($mod.FilePath)
+                
+                foreach ($entry in $archive.Entries) {
+                    $matches = $regex.Matches($entry.FullName)
+                    foreach ($m in $matches) {
+                        [void]$detected.Add($m.Value)
                     }
-                }
-
-                # Check for Keywords (Word Boundary)
-                if (-not $IsSuspicious) {
-                    foreach ($kw in $SuspiciousKeywords) {
-                        if ($Name -match "\b$kw\b") { 
-                            $IsSuspicious = $true
-                            $Reason = "Suspicious Keyword ($kw)"
-                            break
+                    
+                    if ($entry.FullName -match '\.(class|json)$' -or $entry.FullName -match 'MANIFEST\.MF') {
+                        try {
+                            $stream = $entry.Open()
+                            $reader = New-Object System.IO.StreamReader($stream)
+                            $content = $reader.ReadToEnd()
+                            $reader.Close()
+                            $stream.Close()
+                            
+                            $contentMatches = $regex.Matches($content)
+                            foreach ($m in $contentMatches) {
+                                [void]$detected.Add($m.Value)
+                            }
+                        } catch {
+                            # Entry read failed, skip
                         }
                     }
                 }
                 
-                if ($IsSuspicious) {
-                    Write-Output "  [!] FLAGGED: $($Mod.Name) - $Reason" "Red"
-                } else {
-                    Write-Output "  [SAFE] $($Mod.Name)" "Lime"
+                $archive.Dispose()
+                
+                if ($detected.Count -gt 0) {
+                    $suspiciousMods += [PSCustomObject]@{ 
+                        FileName = $mod.FileName
+                        DetectedPatterns = $detected
+                    }
                 }
+                
+            } catch {
+                # Archive corrupted or inaccessible
+                continue
             }
-        } else {
-            Write-Output "  No mods found or folder empty." "Gray"
         }
-    } else {
-        Write-Output "[1] MODS FOLDER NOT FOUND." "Red"
+    } catch {
+        Write-Host "`r⚠️  Error during deep scan: $($_.Exception.Message)" -ForegroundColor Red
     }
-    Write-Output ""
-
-    # 2. Scan Logs
-    $LogsPath = Join-Path $TargetPath "logs\latest.log"
-    if (Test-Path $LogsPath) {
-        Write-Output "[2] SCANNING LOGS FOR KEYWORDS..." "Yellow"
-        $LogContent = Get-Content $LogsPath -ErrorAction SilentlyContinue
-        $Hits = 0
-        
-        foreach ($line in $LogContent) {
-            foreach ($client in $SuspiciousClients) {
-                if ($line -match $client) {
-                    $ShortLine = if ($line.Length -gt 80) { $line.Substring(0, 80) + "..." } else { $line }
-                    Write-Output "  [!] LOGS FOUND '$client': $ShortLine" "Red"
-                    $Hits++
-                }
-            }
-        }
-        if ($Hits -eq 0) {
-            Write-Output "  No suspicious logs found." "Lime"
-        }
-    } else {
-        Write-Output "[2] LOGS NOT FOUND." "Gray"
-    }
-    Write-Output ""
-
-    # 3. Check Options (Ghost client traces)
-    $OptionsPath = Join-Path $TargetPath "options.txt"
-    if (Test-Path $OptionsPath) {
-        Write-Output "[3] CHECKING OPTIONS.TXT..." "Yellow"
-        $Options = Get-Content $OptionsPath
-        
-        $FovLine = $Options | Where-Object { $_ -like "fov:*" }
-        if ($FovLine) {
-            if ($FovLine -match "fov:(.*)") {
-                $FovVal = [float]$matches[1]
-                if ($FovVal -gt 130) {
-                    Write-Output "  [!] HIGH FOV DETECTED: $FovLine" "Red"
-                }
-            }
-        }
-
-        $GammaLine = $Options | Where-Object { $_ -like "gamma:*" }
-        if ($GammaLine) {
-            if ($GammaLine -match "gamma:(.*)") {
-                $GammaVal = [float]$matches[1]
-                if ($GammaVal -gt 5.0) {
-                    Write-Output "  [!] HIGH GAMMA DETECTED: $GammaLine" "Red"
-                }
-            }
-        }
-    } else {
-        Write-Output "[3] OPTIONS.TXT NOT FOUND." "Gray"
-    }
-
-    Write-Output ""
-    Write-Output "--- ANALYSIS COMPLETE ---" "Cyan"
+    
+    Write-Host "`r$(' ' * 100)`r" -NoNewline
 }
 
-# --- EVENTS ---
- $BrowseBtn.Add_Click({ Select-Folder })
- $PasteBtn.Add_Click({ Paste-Clipboard })
- $AnalyzeBtn.Add_Click({ Start-Analysis })
+# Results output
+Write-Host "`n" + ("━" * 76) -ForegroundColor DarkMagenta
 
- $window.ShowDialog() | Out-Null
+if ($verifiedMods.Count -gt 0) {
+    Write-Host "✅ VERIFIED MODS ($($verifiedMods.Count))" -ForegroundColor Green
+    Write-Host ("─" * 76) -ForegroundColor DarkGray
+    foreach ($mod in $verifiedMods) {
+        Write-Host "  ✓ " -ForegroundColor Green -NoNewline
+        Write-Host "$($mod.ModName)" -ForegroundColor White -NoNewline
+        Write-Host " → " -ForegroundColor Gray -NoNewline
+        Write-Host "$($mod.FileName)" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+}
+
+if ($unknownMods.Count -gt 0) {
+    Write-Host "❓ UNKNOWN MODS ($($unknownMods.Count))" -ForegroundColor Yellow
+    Write-Host ("─" * 76) -ForegroundColor DarkGray
+    foreach ($mod in $unknownMods) {
+        $name = $mod.FileName
+        if ($name.Length -gt 50) {
+            $name = $name.Substring(0, 47) + "..."
+        }
+        
+        $nameLen = $name.Length
+        $topLine = "  ╔═ ? " + $name + " " + ("═" * (65 - $nameLen)) + "╗"
+        
+        Write-Host $topLine -ForegroundColor Yellow
+        
+        $sourceText = if ($mod.DownloadSource) { "Source: $($mod.DownloadSource)" } else { "Source: ?" }
+        $srcLen = $sourceText.Length
+        $bottomLine = "  ╚═ " + $sourceText + " " + ("═" * (67 - $srcLen)) + "╝"
+        Write-Host $bottomLine -ForegroundColor Yellow
+        Write-Host ""
+    }
+}
+
+if ($suspiciousMods.Count -gt 0) {
+    Write-Host "🚨 SUSPICIOUS MODS ($($suspiciousMods.Count))" -ForegroundColor Red
+    Write-Host ("─" * 76) -ForegroundColor DarkGray
+    Write-Host ""
+    foreach ($mod in $suspiciousMods) {
+        Write-Host "  ╔═══ " -ForegroundColor Red -NoNewline
+        Write-Host "FLAGGED" -ForegroundColor White -BackgroundColor Red -NoNewline
+        Write-Host " ═══════════════════════════════════════════════════════════" -ForegroundColor Red
+        Write-Host "  ║" -ForegroundColor Red
+        Write-Host "  ║  File: " -ForegroundColor Red -NoNewline
+        Write-Host "$($mod.FileName)" -ForegroundColor Yellow
+        Write-Host "  ║" -ForegroundColor Red
+        Write-Host "  ║  Detected Patterns:" -ForegroundColor Red
+        
+        $patterns = $mod.DetectedPatterns | Sort-Object
+        foreach ($p in $patterns) {
+            Write-Host "  ║    • " -ForegroundColor Red -NoNewline
+            Write-Host "$p" -ForegroundColor White
+        }
+        
+        Write-Host "  ║" -ForegroundColor Red
+        Write-Host "  ╚═══════════════════════════════════════════════════════════════════════" -ForegroundColor Red
+        Write-Host ""
+    }
+}
+
+Write-Host "📊 SUMMARY" -ForegroundColor Magenta
+Write-Host ("━" * 76) -ForegroundColor DarkMagenta
+Write-Host "  Total files scanned: " -ForegroundColor Gray -NoNewline
+Write-Host "$totalFiles" -ForegroundColor White
+Write-Host "  Verified mods: " -ForegroundColor Gray -NoNewline
+Write-Host "$($verifiedMods.Count)" -ForegroundColor Green
+Write-Host "  Unknown mods: " -ForegroundColor Gray -NoNewline
+Write-Host "$($unknownMods.Count)" -ForegroundColor Yellow
+Write-Host "  Suspicious mods: " -ForegroundColor Gray -NoNewline
+Write-Host "$($suspiciousMods.Count)" -ForegroundColor Red
+Write-Host
+Write-Host ("━" * 76) -ForegroundColor DarkMagenta
+Write-Host ""
+Write-Host "  ✨ Analysis complete! Thanks for using Mecz Mod Analyzer 🐈" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  👤 Mecz Team" -ForegroundColor Magenta
+Write-Host ""
+Write-Host "Press any key to exit..." -ForegroundColor DarkGray
+ $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
