@@ -1,5 +1,5 @@
 # ==============================================================================
-# MINECRAFT FORENSIC MOD ANALYZER (VISUAL FIX)
+# MINECRAFT FORENSIC MOD ANALYZER (FIXED CRASH & FALSE FLAGS)
 # ==============================================================================
 
 Add-Type -AssemblyName PresentationFramework
@@ -30,7 +30,7 @@ Add-Type -AssemblyName System.Windows.Forms
         <!-- Header -->
         <TextBlock Grid.Row="0" Text="MINECRAFT FORENSIC TOOL" FontSize="20" FontWeight="Bold" Foreground="#00ffcc" Margin="0,0,0,15"/>
 
-        <!-- CONTROLS (New Layout) -->
+        <!-- CONTROLS -->
         <Grid Grid.Row="1" Margin="0,0,0,15">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -39,12 +39,10 @@ Add-Type -AssemblyName System.Windows.Forms
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Buttons -->
             <Button x:Name="BrowseBtn" Grid.Column="0" Content="Browse Folder" Width="120" Height="35" Background="#444" Foreground="White" Margin="0,0,10,0" FontSize="12"/>
             <Button x:Name="PasteBtn"   Grid.Column="1" Content="PASTE PATH" Width="100" Height="35" Background="#007acc" Foreground="White" Margin="0,0,10,0" FontWeight="Bold" FontSize="12"/>
             <Button x:Name="AnalyzeBtn" Grid.Column="2" Content="ANALYZE"     Width="100" Height="35" Background="#28a745" Foreground="White" FontWeight="Bold" FontSize="12"/>
 
-            <!-- TEXT BOX (Made obvious) -->
             <TextBox x:Name="PathBox" 
                      Grid.Column="3" 
                      Text="CLICK HERE AND PASTE PATH (Ctrl+V) OR CLICK PASTE BUTTON" 
@@ -66,7 +64,7 @@ Add-Type -AssemblyName System.Windows.Forms
         </Border>
 
         <!-- Footer -->
-        <TextBlock Grid.Row="3" Text="Mecz Forensic Tool v1.2 | Explicit Paste Support" FontSize="10" Foreground="#666" HorizontalAlignment="Right" Margin="0,10,0,0"/>
+        <TextBlock Grid.Row="3" Text="Mecz Forensic Tool v1.3 | Fixed Crash" FontSize="10" Foreground="#666" HorizontalAlignment="Right" Margin="0,10,0,0"/>
     </Grid>
 </Window>
 "@
@@ -82,17 +80,34 @@ Add-Type -AssemblyName System.Windows.Forms
  $OutputBox = $window.FindName("OutputBox")
  $PathBox   = $window.FindName("PathBox")
 
-# Suspicious Keywords
+# Suspicious Keywords (Refined to reduce false flags)
  $SuspiciousKeywords = @(
-    "bypass", "cheat", "hack", "killaura", "fly", "scaffold", "timer", 
-    "autotool", "fullbright", "esp", "tracer", "noslow", "speed", "critical",
-    "meteor", "liquid", "wurst", "impact", "rise", "future", "tenacity", "reach", "autoclicker"
+    "killaura", "fly", "scaffold", "reach", "autoclicker", 
+    "fullbright", "esp", "tracer", "noslow", "inventorymove", 
+    "timer", "autotool", "stealer", "rename", "autoeat", "crystalaura", "bedaura"
 )
+
+# Specific Clients to look for
+ $SuspiciousClients = @(
+    "meteor", "liquidbounce", "wurst", "impact", "rise", "future", "tenacity", "vape", "karamel", "gomz"
+)
+
+# Helper function to convert Hex to Brush (Fixes the Crash)
+function Get-Brush {
+    param([string]$hex)
+    try {
+        $c = [System.Windows.Media.ColorConverter]::ConvertFromString($hex)
+        return [System.Windows.Media.SolidColorBrush]::new($c)
+    } catch {
+        return [System.Windows.Media.Brushes]::White
+    }
+}
 
 function Write-Output {
     param([string]$text, [string]$color = "#00ffcc")
     $OutputBox.Inlines.Add((New-Object Windows.Documents.Run "$text`r`n"))
-    $OutputBox.Inlines[$OutputBox.Inlines.Count-1].Foreground = [Windows.Media.Brushes]::Parse($color)
+    # Use the helper function instead of the broken Parse method
+    $OutputBox.Inlines[$OutputBox.Inlines.Count-1].Foreground = Get-Brush $color
 }
 
 function Select-Folder {
@@ -140,16 +155,35 @@ function Start-Analysis {
         $Mods = Get-ChildItem -Path $ModsPath -Filter "*.jar" -ErrorAction SilentlyContinue
         if ($Mods) {
             foreach ($Mod in $Mods) {
-                $Name = $Mod.Name
+                $Name = $Mod.Name.ToLower() # Case insensitive check
                 $IsSuspicious = $false
-                foreach ($kw in $SuspiciousKeywords) {
-                    if ($Name -like "*$kw*") { $IsSuspicious = $true; break }
+                $Reason = ""
+
+                # Check for Client Names
+                foreach ($client in $SuspiciousClients) {
+                    if ($Name -like "*$client*") { 
+                        $IsSuspicious = $true
+                        $Reason = "Known Client ($client)"
+                        break
+                    }
+                }
+
+                # Check for Keywords
+                if (-not $IsSuspicious) {
+                    foreach ($kw in $SuspiciousKeywords) {
+                        # Use regex \b to match whole words (prevents 'timer' matching 'totemtimer')
+                        if ($Name -match "\b$kw\b") { 
+                            $IsSuspicious = $true
+                            $Reason = "Suspicious Keyword ($kw)"
+                            break
+                        }
+                    }
                 }
                 
                 if ($IsSuspicious) {
-                    Write-Output "  [!] SUSPICIOUS: $Name" "#ff4444"
+                    Write-Output "  [!] FLAGGED: $($Mod.Name) - $Reason" "#ff4444"
                 } else {
-                    Write-Output "  [+] $Name" "#00cc00"
+                    Write-Output "  [SAFE] $($Mod.Name)" "#00cc00"
                 }
             }
         } else {
@@ -168,23 +202,24 @@ function Start-Analysis {
         $Hits = 0
         
         foreach ($line in $LogContent) {
-            foreach ($kw in $SuspiciousKeywords) {
-                if ($line -match $kw) {
-                    $ShortLine = if ($line.Length -gt 100) { $line.Substring(0, 100) + "..." } else { $line }
-                    Write-Output "  [!] FOUND '$kw': $ShortLine" "#ff4444"
+            # Check for Clients
+            foreach ($client in $SuspiciousClients) {
+                if ($line -match $client) {
+                    $ShortLine = if ($line.Length -gt 80) { $line.Substring(0, 80) + "..." } else { $line }
+                    Write-Output "  [!] LOGS FOUND '$client': $ShortLine" "#ff4444"
                     $Hits++
                 }
             }
         }
         if ($Hits -eq 0) {
-            Write-Output "  No suspicious keywords found in logs." "#00cc00"
+            Write-Output "  No suspicious logs found." "#00cc00"
         }
     } else {
         Write-Output "[2] LOGS NOT FOUND." "#aaaaaa"
     }
     Write-Output ""
 
-    # 3. Check Options
+    # 3. Check Options (Ghost client traces)
     $OptionsPath = Join-Path $TargetPath "options.txt"
     if (Test-Path $OptionsPath) {
         Write-Output "[3] CHECKING OPTIONS.TXT..." "#ffff00"
