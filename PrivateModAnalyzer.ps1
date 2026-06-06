@@ -1,5 +1,5 @@
 # ==============================================================================
-# MINECRAFT FORENSIC MOD ANALYZER (FIXED CRASH & FALSE FLAGS)
+# MECZ FORENSIC MOD ANALYZER (FIXED CRASH)
 # ==============================================================================
 
 Add-Type -AssemblyName PresentationFramework
@@ -10,7 +10,7 @@ Add-Type -AssemblyName System.Windows.Forms
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Minecraft Forensic Analyzer"
+    Title="Mecz Forensic Tool"
     Width="900"
     Height="600"
     WindowStartupLocation="CenterScreen"
@@ -24,47 +24,38 @@ Add-Type -AssemblyName System.Windows.Forms
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <TextBlock Grid.Row="0" Text="MINECRAFT FORENSIC TOOL" FontSize="20" FontWeight="Bold" Foreground="#00ffcc" Margin="0,0,0,15"/>
+        <TextBlock Grid.Row="0" Text="MINECRAFT FORENSIC TOOL" FontSize="22" FontWeight="Bold" Foreground="#00ffcc" Margin="0,0,0,15"/>
 
-        <!-- CONTROLS -->
-        <Grid Grid.Row="1" Margin="0,0,0,15">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <!-- Controls -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,15">
+            <Button x:Name="BrowseBtn" Content="Browse Folder" Width="120" Height="35" Background="#444" Foreground="White" Margin="0,0,10,0" FontSize="12"/>
+            <Button x:Name="PasteBtn"   Content="PASTE PATH" Width="120" Height="35" Background="#007acc" Foreground="White" Margin="0,0,10,0" FontWeight="Bold" FontSize="12"/>
+            <Button x:Name="AnalyzeBtn" Content="ANALYZE"     Width="120" Height="35" Background="#28a745" Foreground="White" FontWeight="Bold" FontSize="12"/>
 
-            <Button x:Name="BrowseBtn" Grid.Column="0" Content="Browse Folder" Width="120" Height="35" Background="#444" Foreground="White" Margin="0,0,10,0" FontSize="12"/>
-            <Button x:Name="PasteBtn"   Grid.Column="1" Content="PASTE PATH" Width="100" Height="35" Background="#007acc" Foreground="White" Margin="0,0,10,0" FontWeight="Bold" FontSize="12"/>
-            <Button x:Name="AnalyzeBtn" Grid.Column="2" Content="ANALYZE"     Width="100" Height="35" Background="#28a745" Foreground="White" FontWeight="Bold" FontSize="12"/>
-
+            <!-- PATH BOX -->
             <TextBox x:Name="PathBox" 
-                     Grid.Column="3" 
-                     Text="CLICK HERE AND PASTE PATH (Ctrl+V) OR CLICK PASTE BUTTON" 
+                     Width="440" 
+                     Height="35" 
                      Background="#333" 
                      Foreground="White" 
-                     BorderBrush="#00ccff" 
-                     BorderThickness="2"
-                     FontSize="12"
-                     Padding="5"
+                     BorderBrush="#555" 
+                     Text="PASTE PATH HERE OR CLICK BROWSE" 
                      VerticalContentAlignment="Center"
                      Margin="10,0,0,0"/>
-        </Grid>
+        </StackPanel>
 
-        <!-- Output -->
+        <!-- Output Area (Switched to Listbox for stability) -->
         <Border Grid.Row="2" BorderBrush="#444" BorderThickness="1" Background="#111">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="OutputBox" Text="Waiting for analysis..." Foreground="#00ffcc" Padding="10" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"/>
-            </ScrollViewer>
+            <ListBox x:Name="OutputBox" 
+                     Background="#111" 
+                     Foreground="#00ffcc" 
+                     FontFamily="Consolas" 
+                     FontSize="11" 
+                     BorderThickness="0"/>
         </Border>
-
-        <!-- Footer -->
-        <TextBlock Grid.Row="3" Text="Mecz Forensic Tool v1.3 | Fixed Crash" FontSize="10" Foreground="#666" HorizontalAlignment="Right" Margin="0,10,0,0"/>
     </Grid>
 </Window>
 "@
@@ -80,34 +71,24 @@ Add-Type -AssemblyName System.Windows.Forms
  $OutputBox = $window.FindName("OutputBox")
  $PathBox   = $window.FindName("PathBox")
 
-# Suspicious Keywords (Refined to reduce false flags)
- $SuspiciousKeywords = @(
-    "killaura", "fly", "scaffold", "reach", "autoclicker", 
-    "fullbright", "esp", "tracer", "noslow", "inventorymove", 
-    "timer", "autotool", "stealer", "rename", "autoeat", "crystalaura", "bedaura"
-)
+# Suspicious Keywords (Refined)
+ $SuspiciousClients = @("meteor", "liquidbounce", "wurst", "impact", "rise", "future", "tenacity", "vape", "karamel", "gomz")
+ $SuspiciousKeywords = @("killaura", "fly", "scaffold", "reach", "autoclicker", "fullbright", "esp", "tracer", "noslow", "inventorymove", "timer", "autotool", "stealer", "rename", "autoeat", "crystalaura", "bedaura")
 
-# Specific Clients to look for
- $SuspiciousClients = @(
-    "meteor", "liquidbounce", "wurst", "impact", "rise", "future", "tenacity", "vape", "karamel", "gomz"
-)
-
-# Helper function to convert Hex to Brush (Fixes the Crash)
-function Get-Brush {
-    param([string]$hex)
-    try {
-        $c = [System.Windows.Media.ColorConverter]::ConvertFromString($hex)
-        return [System.Windows.Media.SolidColorBrush]::new($c)
-    } catch {
-        return [System.Windows.Media.Brushes]::White
-    }
-}
-
+# Helper to write colored lines (FIXED CRASH)
 function Write-Output {
-    param([string]$text, [string]$color = "#00ffcc")
-    $OutputBox.Inlines.Add((New-Object Windows.Documents.Run "$text`r`n"))
-    # Use the helper function instead of the broken Parse method
-    $OutputBox.Inlines[$OutputBox.Inlines.Count-1].Foreground = Get-Brush $color
+    param([string]$text, [string]$color = "White")
+    
+    # Create a TextBlock for each line
+    $tb = New-Object System.Windows.Controls.TextBlock
+    $tb.Text = $text
+    $tb.Foreground = $color # This works on a new object
+    
+    # Add to ListBox
+    $OutputBox.Items.Add($tb)
+    
+    # Auto-scroll to bottom
+    $OutputBox.ScrollIntoView($tb)
 }
 
 function Select-Folder {
@@ -122,12 +103,8 @@ function Paste-Clipboard {
         $ClipboardText = [System.Windows.Forms.Clipboard]::GetText()
         if (-not [string]::IsNullOrWhiteSpace($ClipboardText)) {
             $PathBox.Text = $ClipboardText
-        } else {
-            [System.Windows.MessageBox]::Show("Clipboard is empty.")
         }
-    } catch {
-        [System.Windows.MessageBox]::Show("Could not read clipboard.")
-    }
+    } catch {}
 }
 
 function Start-Analysis {
@@ -143,19 +120,19 @@ function Start-Analysis {
         return
     }
 
-    $OutputBox.Text = "" 
-    Write-Output "--- STARTING ANALYSIS ---" "#ffffff"
-    Write-Output "Target: $TargetPath" "#aaaaaa"
+    $OutputBox.Items.Clear() # Clear previous
+    Write-Output "--- STARTING ANALYSIS ---" "Cyan"
+    Write-Output "Target: $TargetPath" "Gray"
     Write-Output ""
 
     # 1. Check Mods Folder
     $ModsPath = Join-Path $TargetPath "mods"
     if (Test-Path $ModsPath) {
-        Write-Output "[1] SCANNING MODS FOLDER..." "#ffff00"
+        Write-Output "[1] SCANNING MODS FOLDER..." "Yellow"
         $Mods = Get-ChildItem -Path $ModsPath -Filter "*.jar" -ErrorAction SilentlyContinue
         if ($Mods) {
             foreach ($Mod in $Mods) {
-                $Name = $Mod.Name.ToLower() # Case insensitive check
+                $Name = $Mod.Name.ToLower()
                 $IsSuspicious = $false
                 $Reason = ""
 
@@ -168,10 +145,9 @@ function Start-Analysis {
                     }
                 }
 
-                # Check for Keywords
+                # Check for Keywords (Word Boundary)
                 if (-not $IsSuspicious) {
                     foreach ($kw in $SuspiciousKeywords) {
-                        # Use regex \b to match whole words (prevents 'timer' matching 'totemtimer')
                         if ($Name -match "\b$kw\b") { 
                             $IsSuspicious = $true
                             $Reason = "Suspicious Keyword ($kw)"
@@ -181,48 +157,47 @@ function Start-Analysis {
                 }
                 
                 if ($IsSuspicious) {
-                    Write-Output "  [!] FLAGGED: $($Mod.Name) - $Reason" "#ff4444"
+                    Write-Output "  [!] FLAGGED: $($Mod.Name) - $Reason" "Red"
                 } else {
-                    Write-Output "  [SAFE] $($Mod.Name)" "#00cc00"
+                    Write-Output "  [SAFE] $($Mod.Name)" "Lime"
                 }
             }
         } else {
-            Write-Output "  No mods found or folder empty." "#aaaaaa"
+            Write-Output "  No mods found or folder empty." "Gray"
         }
     } else {
-        Write-Output "[1] MODS FOLDER NOT FOUND." "#ff4444"
+        Write-Output "[1] MODS FOLDER NOT FOUND." "Red"
     }
     Write-Output ""
 
     # 2. Scan Logs
     $LogsPath = Join-Path $TargetPath "logs\latest.log"
     if (Test-Path $LogsPath) {
-        Write-Output "[2] SCANNING LOGS FOR KEYWORDS..." "#ffff00"
+        Write-Output "[2] SCANNING LOGS FOR KEYWORDS..." "Yellow"
         $LogContent = Get-Content $LogsPath -ErrorAction SilentlyContinue
         $Hits = 0
         
         foreach ($line in $LogContent) {
-            # Check for Clients
             foreach ($client in $SuspiciousClients) {
                 if ($line -match $client) {
                     $ShortLine = if ($line.Length -gt 80) { $line.Substring(0, 80) + "..." } else { $line }
-                    Write-Output "  [!] LOGS FOUND '$client': $ShortLine" "#ff4444"
+                    Write-Output "  [!] LOGS FOUND '$client': $ShortLine" "Red"
                     $Hits++
                 }
             }
         }
         if ($Hits -eq 0) {
-            Write-Output "  No suspicious logs found." "#00cc00"
+            Write-Output "  No suspicious logs found." "Lime"
         }
     } else {
-        Write-Output "[2] LOGS NOT FOUND." "#aaaaaa"
+        Write-Output "[2] LOGS NOT FOUND." "Gray"
     }
     Write-Output ""
 
     # 3. Check Options (Ghost client traces)
     $OptionsPath = Join-Path $TargetPath "options.txt"
     if (Test-Path $OptionsPath) {
-        Write-Output "[3] CHECKING OPTIONS.TXT..." "#ffff00"
+        Write-Output "[3] CHECKING OPTIONS.TXT..." "Yellow"
         $Options = Get-Content $OptionsPath
         
         $FovLine = $Options | Where-Object { $_ -like "fov:*" }
@@ -230,7 +205,7 @@ function Start-Analysis {
             if ($FovLine -match "fov:(.*)") {
                 $FovVal = [float]$matches[1]
                 if ($FovVal -gt 130) {
-                    Write-Output "  [!] HIGH FOV DETECTED: $FovLine" "#ff0000"
+                    Write-Output "  [!] HIGH FOV DETECTED: $FovLine" "Red"
                 }
             }
         }
@@ -240,16 +215,16 @@ function Start-Analysis {
             if ($GammaLine -match "gamma:(.*)") {
                 $GammaVal = [float]$matches[1]
                 if ($GammaVal -gt 5.0) {
-                    Write-Output "  [!] HIGH GAMMA DETECTED: $GammaLine" "#ff0000"
+                    Write-Output "  [!] HIGH GAMMA DETECTED: $GammaLine" "Red"
                 }
             }
         }
     } else {
-        Write-Output "[3] OPTIONS.TXT NOT FOUND." "#aaaaaa"
+        Write-Output "[3] OPTIONS.TXT NOT FOUND." "Gray"
     }
 
     Write-Output ""
-    Write-Output "--- ANALYSIS COMPLETE ---" "#ffffff"
+    Write-Output "--- ANALYSIS COMPLETE ---" "Cyan"
 }
 
 # --- EVENTS ---
