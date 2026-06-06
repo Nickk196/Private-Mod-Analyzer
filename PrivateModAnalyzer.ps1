@@ -1,6 +1,5 @@
 # ==============================================================================
-# MINECRAFT FORENSIC MOD ANALYZER
-# Features: Mod Listing, Log Keyword Scanning, Suspicious Config Detection
+# MINECRAFT FORENSIC MOD ANALYZER (PASTE SUPPORT)
 # ==============================================================================
 
 Add-Type -AssemblyName PresentationFramework
@@ -33,9 +32,19 @@ Add-Type -AssemblyName System.Windows.Forms
 
         <!-- Controls -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <Button x:Name="BrowseBtn" Content="Select .minecraft Folder" Width="200" Height="30" Background="#333" Foreground="White" Margin="0,0,10,0"/>
+            <Button x:Name="BrowseBtn" Content="Browse Folder" Width="120" Height="30" Background="#333" Foreground="White" Margin="0,0,10,0"/>
             <Button x:Name="AnalyzeBtn" Content="ANALYZE" Width="100" Height="30" Background="#00aa00" Foreground="White" FontWeight="Bold"/>
-            <TextBlock x:Name="PathLabel" Text="No folder selected" VerticalAlignment="Center" Foreground="#aaa" Margin="10,0,0,0"/>
+            <!-- PATH TEXTBOX -->
+            <TextBox x:Name="PathBox" 
+                     Text="Paste path here (e.g. C:\Users\Name\AppData\Roaming\.minecraft)" 
+                     Width="400" 
+                     Height="30" 
+                     Background="#2d2d2d" 
+                     Foreground="White" 
+                     BorderBrush="#555" 
+                     Padding="5"
+                     VerticalContentAlignment="Center"
+                     Margin="10,0,0,0"/>
         </StackPanel>
 
         <!-- Output -->
@@ -46,7 +55,7 @@ Add-Type -AssemblyName System.Windows.Forms
         </Border>
 
         <!-- Footer -->
-        <TextBlock Grid.Row="3" Text="Created for Mecz Launcher | v1.0" FontSize="10" Foreground="#555" HorizontalAlignment="Right" Margin="0,10,0,0"/>
+        <TextBlock Grid.Row="3" Text="Created for Mecz Launcher | v1.1" FontSize="10" Foreground="#555" HorizontalAlignment="Right" Margin="0,10,0,0"/>
     </Grid>
 </Window>
 "@
@@ -59,15 +68,13 @@ Add-Type -AssemblyName System.Windows.Forms
  $BrowseBtn = $window.FindName("BrowseBtn")
  $AnalyzeBtn = $window.FindName("AnalyzeBtn")
  $OutputBox = $window.FindName("OutputBox")
- $PathLabel = $window.FindName("PathLabel")
-
- $SelectedPath = ""
+ $PathBox   = $window.FindName("PathBox")
 
 # Suspicious Keywords to look for in logs
  $SuspiciousKeywords = @(
     "bypass", "cheat", "hack", "killaura", "fly", "scaffold", "timer", 
     "autotool", "fullbright", "esp", "tracer", "noslow", "speed", "critical",
-    "meteor", "liquid", "wurst", "impact", "rise", "future", "tenacity"
+    "meteor", "liquid", "wurst", "impact", "rise", "future", "tenacity", "reach", "autoclicker"
 )
 
 function Write-Output {
@@ -79,25 +86,33 @@ function Write-Output {
 function Select-Folder {
     $FolderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
     if ($FolderBrowser.ShowDialog() -eq "OK") {
-        $script:SelectedPath = $FolderBrowser.SelectedPath
-        $PathLabel.Text = $script:SelectedPath
-        Write-Output "Selected: $script:SelectedPath"
+        # Update the Text Box instead of a variable
+        $PathBox.Text = $FolderBrowser.SelectedPath
     }
 }
 
 function Start-Analysis {
-    if ([string]::IsNullOrEmpty($SelectedPath)) {
-        [System.Windows.MessageBox]::Show("Please select a folder first.")
+    # Read directly from the Text Box
+    $TargetPath = $PathBox.Text
+
+    if ([string]::IsNullOrWhiteSpace($TargetPath)) {
+        [System.Windows.MessageBox]::Show("Please enter or select a path first.")
+        return
+    }
+
+    # Verify path exists
+    if (!(Test-Path $TargetPath)) {
+        [System.Windows.MessageBox]::Show("The path '$TargetPath' does not exist.")
         return
     }
 
     $OutputBox.Text = "" # Clear previous
     Write-Output "--- STARTING ANALYSIS ---" "#ffffff"
-    Write-Output "Target: $SelectedPath" "#aaaaaa"
+    Write-Output "Target: $TargetPath" "#aaaaaa"
     Write-Output ""
 
     # 1. Check Mods Folder
-    $ModsPath = Join-Path $SelectedPath "mods"
+    $ModsPath = Join-Path $TargetPath "mods"
     if (Test-Path $ModsPath) {
         Write-Output "[1] SCANNING MODS FOLDER..." "#ffff00"
         $Mods = Get-ChildItem -Path $ModsPath -Filter "*.jar" -ErrorAction SilentlyContinue
@@ -125,7 +140,7 @@ function Start-Analysis {
     Write-Output ""
 
     # 2. Scan Logs
-    $LogsPath = Join-Path $SelectedPath "logs\latest.log"
+    $LogsPath = Join-Path $TargetPath "logs\latest.log"
     if (Test-Path $LogsPath) {
         Write-Output "[2] SCANNING LOGS FOR KEYWORDS..." "#ffff00"
         $LogContent = Get-Content $LogsPath -ErrorAction SilentlyContinue
@@ -134,7 +149,9 @@ function Start-Analysis {
         foreach ($line in $LogContent) {
             foreach ($kw in $SuspiciousKeywords) {
                 if ($line -match $kw) {
-                    Write-Output "  [!] FOUND '$kw': $line" "#ff4444"
+                    # Only print first 100 chars of line to keep it clean
+                    $ShortLine = if ($line.Length -gt 100) { $line.Substring(0, 100) + "..." } else { $line }
+                    Write-Output "  [!] FOUND '$kw': $ShortLine" "#ff4444"
                     $Hits++
                 }
             }
@@ -148,7 +165,7 @@ function Start-Analysis {
     Write-Output ""
 
     # 3. Check Options (Ghost client traces)
-    $OptionsPath = Join-Path $SelectedPath "options.txt"
+    $OptionsPath = Join-Path $TargetPath "options.txt"
     if (Test-Path $OptionsPath) {
         Write-Output "[3] CHECKING OPTIONS.TXT..." "#ffff00"
         $Options = Get-Content $OptionsPath
@@ -156,18 +173,22 @@ function Start-Analysis {
         # Check for extremely high FOV (common in Xray/Cheats)
         $FovLine = $Options | Where-Object { $_ -like "fov:*" }
         if ($FovLine) {
-            $FovVal = [float]($FovLine -split ":")[1]
-            if ($FovVal -gt 130) {
-                Write-Output "  [!] HIGH FOV DETECTED: $FovLine" "#ff0000"
+            if ($FovLine -match "fov:(.*)") {
+                $FovVal = [float]$matches[1]
+                if ($FovVal -gt 130) {
+                    Write-Output "  [!] HIGH FOV DETECTED: $FovLine" "#ff0000"
+                }
             }
         }
 
         # Check for gamma (Fullbright)
         $GammaLine = $Options | Where-Object { $_ -like "gamma:*" }
         if ($GammaLine) {
-            $GammaVal = [float]($GammaLine -split ":")[1]
-            if ($GammaVal -gt 5.0) {
-                Write-Output "  [!] HIGH GAMMA DETECTED: $GammaLine" "#ff0000"
+            if ($GammaLine -match "gamma:(.*)") {
+                $GammaVal = [float]$matches[1]
+                if ($GammaVal -gt 5.0) {
+                    Write-Output "  [!] HIGH GAMMA DETECTED: $GammaLine" "#ff0000"
+                }
             }
         }
     } else {
