@@ -1,5 +1,5 @@
 # ==============================================================================
-# MINECRAFT FORENSIC MOD ANALYZER (PASTE SUPPORT)
+# MINECRAFT FORENSIC MOD ANALYZER (VISUAL FIX)
 # ==============================================================================
 
 Add-Type -AssemblyName PresentationFramework
@@ -11,15 +11,15 @@ Add-Type -AssemblyName System.Windows.Forms
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Minecraft Forensic Analyzer"
-    Width="800"
+    Width="900"
     Height="600"
     WindowStartupLocation="CenterScreen"
     ResizeMode="CanMinimize"
     Background="#1e1e1e"
     Foreground="White"
-    FontFamily="Consolas">
+    FontFamily="Segoe UI">
 
-    <Grid Margin="10">
+    <Grid Margin="15">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -28,34 +28,45 @@ Add-Type -AssemblyName System.Windows.Forms
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <TextBlock Grid.Row="0" Text="MINECRAFT FORENSIC TOOL" FontSize="18" FontWeight="Bold" Foreground="#00ffcc" Margin="0,0,0,10"/>
+        <TextBlock Grid.Row="0" Text="MINECRAFT FORENSIC TOOL" FontSize="20" FontWeight="Bold" Foreground="#00ffcc" Margin="0,0,0,15"/>
 
-        <!-- Controls -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <Button x:Name="BrowseBtn" Content="Browse Folder" Width="120" Height="30" Background="#333" Foreground="White" Margin="0,0,10,0"/>
-            <Button x:Name="AnalyzeBtn" Content="ANALYZE" Width="100" Height="30" Background="#00aa00" Foreground="White" FontWeight="Bold"/>
-            <!-- PATH TEXTBOX -->
+        <!-- CONTROLS (New Layout) -->
+        <Grid Grid.Row="1" Margin="0,0,0,15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Buttons -->
+            <Button x:Name="BrowseBtn" Grid.Column="0" Content="Browse Folder" Width="120" Height="35" Background="#444" Foreground="White" Margin="0,0,10,0" FontSize="12"/>
+            <Button x:Name="PasteBtn"   Grid.Column="1" Content="PASTE PATH" Width="100" Height="35" Background="#007acc" Foreground="White" Margin="0,0,10,0" FontWeight="Bold" FontSize="12"/>
+            <Button x:Name="AnalyzeBtn" Grid.Column="2" Content="ANALYZE"     Width="100" Height="35" Background="#28a745" Foreground="White" FontWeight="Bold" FontSize="12"/>
+
+            <!-- TEXT BOX (Made obvious) -->
             <TextBox x:Name="PathBox" 
-                     Text="Paste path here (e.g. C:\Users\Name\AppData\Roaming\.minecraft)" 
-                     Width="400" 
-                     Height="30" 
-                     Background="#2d2d2d" 
+                     Grid.Column="3" 
+                     Text="CLICK HERE AND PASTE PATH (Ctrl+V) OR CLICK PASTE BUTTON" 
+                     Background="#333" 
                      Foreground="White" 
-                     BorderBrush="#555" 
+                     BorderBrush="#00ccff" 
+                     BorderThickness="2"
+                     FontSize="12"
                      Padding="5"
                      VerticalContentAlignment="Center"
                      Margin="10,0,0,0"/>
-        </StackPanel>
+        </Grid>
 
         <!-- Output -->
         <Border Grid.Row="2" BorderBrush="#444" BorderThickness="1" Background="#111">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="OutputBox" Text="Waiting for analysis..." Foreground="#00ffcc" Padding="10" TextWrapping="Wrap"/>
+                <TextBlock x:Name="OutputBox" Text="Waiting for analysis..." Foreground="#00ffcc" Padding="10" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"/>
             </ScrollViewer>
         </Border>
 
         <!-- Footer -->
-        <TextBlock Grid.Row="3" Text="Created for Mecz Launcher | v1.1" FontSize="10" Foreground="#555" HorizontalAlignment="Right" Margin="0,10,0,0"/>
+        <TextBlock Grid.Row="3" Text="Mecz Forensic Tool v1.2 | Explicit Paste Support" FontSize="10" Foreground="#666" HorizontalAlignment="Right" Margin="0,10,0,0"/>
     </Grid>
 </Window>
 "@
@@ -66,11 +77,12 @@ Add-Type -AssemblyName System.Windows.Forms
  $window = [Windows.Markup.XamlReader]::Load($reader)
 
  $BrowseBtn = $window.FindName("BrowseBtn")
+ $PasteBtn  = $window.FindName("PasteBtn")
  $AnalyzeBtn = $window.FindName("AnalyzeBtn")
  $OutputBox = $window.FindName("OutputBox")
  $PathBox   = $window.FindName("PathBox")
 
-# Suspicious Keywords to look for in logs
+# Suspicious Keywords
  $SuspiciousKeywords = @(
     "bypass", "cheat", "hack", "killaura", "fly", "scaffold", "timer", 
     "autotool", "fullbright", "esp", "tracer", "noslow", "speed", "critical",
@@ -86,27 +98,37 @@ function Write-Output {
 function Select-Folder {
     $FolderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
     if ($FolderBrowser.ShowDialog() -eq "OK") {
-        # Update the Text Box instead of a variable
         $PathBox.Text = $FolderBrowser.SelectedPath
     }
 }
 
+function Paste-Clipboard {
+    try {
+        $ClipboardText = [System.Windows.Forms.Clipboard]::GetText()
+        if (-not [string]::IsNullOrWhiteSpace($ClipboardText)) {
+            $PathBox.Text = $ClipboardText
+        } else {
+            [System.Windows.MessageBox]::Show("Clipboard is empty.")
+        }
+    } catch {
+        [System.Windows.MessageBox]::Show("Could not read clipboard.")
+    }
+}
+
 function Start-Analysis {
-    # Read directly from the Text Box
     $TargetPath = $PathBox.Text
 
     if ([string]::IsNullOrWhiteSpace($TargetPath)) {
-        [System.Windows.MessageBox]::Show("Please enter or select a path first.")
+        [System.Windows.MessageBox]::Show("Please enter, paste, or select a path first.")
         return
     }
 
-    # Verify path exists
     if (!(Test-Path $TargetPath)) {
-        [System.Windows.MessageBox]::Show("The path '$TargetPath' does not exist.")
+        [System.Windows.MessageBox]::Show("The path does not exist.`n`nPath: $TargetPath")
         return
     }
 
-    $OutputBox.Text = "" # Clear previous
+    $OutputBox.Text = "" 
     Write-Output "--- STARTING ANALYSIS ---" "#ffffff"
     Write-Output "Target: $TargetPath" "#aaaaaa"
     Write-Output ""
@@ -119,7 +141,6 @@ function Start-Analysis {
         if ($Mods) {
             foreach ($Mod in $Mods) {
                 $Name = $Mod.Name
-                # Simple keyword check on filename
                 $IsSuspicious = $false
                 foreach ($kw in $SuspiciousKeywords) {
                     if ($Name -like "*$kw*") { $IsSuspicious = $true; break }
@@ -149,7 +170,6 @@ function Start-Analysis {
         foreach ($line in $LogContent) {
             foreach ($kw in $SuspiciousKeywords) {
                 if ($line -match $kw) {
-                    # Only print first 100 chars of line to keep it clean
                     $ShortLine = if ($line.Length -gt 100) { $line.Substring(0, 100) + "..." } else { $line }
                     Write-Output "  [!] FOUND '$kw': $ShortLine" "#ff4444"
                     $Hits++
@@ -164,13 +184,12 @@ function Start-Analysis {
     }
     Write-Output ""
 
-    # 3. Check Options (Ghost client traces)
+    # 3. Check Options
     $OptionsPath = Join-Path $TargetPath "options.txt"
     if (Test-Path $OptionsPath) {
         Write-Output "[3] CHECKING OPTIONS.TXT..." "#ffff00"
         $Options = Get-Content $OptionsPath
         
-        # Check for extremely high FOV (common in Xray/Cheats)
         $FovLine = $Options | Where-Object { $_ -like "fov:*" }
         if ($FovLine) {
             if ($FovLine -match "fov:(.*)") {
@@ -181,7 +200,6 @@ function Start-Analysis {
             }
         }
 
-        # Check for gamma (Fullbright)
         $GammaLine = $Options | Where-Object { $_ -like "gamma:*" }
         if ($GammaLine) {
             if ($GammaLine -match "gamma:(.*)") {
@@ -201,6 +219,7 @@ function Start-Analysis {
 
 # --- EVENTS ---
  $BrowseBtn.Add_Click({ Select-Folder })
+ $PasteBtn.Add_Click({ Paste-Clipboard })
  $AnalyzeBtn.Add_Click({ Start-Analysis })
 
  $window.ShowDialog() | Out-Null
