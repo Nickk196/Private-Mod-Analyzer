@@ -4,11 +4,57 @@ Clear-Host
 Write-Host "Mecz Mod Analyzer (Lite)" -ForegroundColor Gray
 Write-Host
 
-Write-Host "Path to mods folder (Enter for default): " -NoNewline
- $modsPath = Read-Host
+# --- New Auto-Detect Logic ---
+function Resolve-GamePath {
+    $defaultPath = "$env:USERPROFILE\AppData\Roaming\.minecraft\mods"
+    $detectedPath = $defaultPath
+    $sourceName = "Standard/Vanilla"
 
-if ([string]::IsNullOrWhiteSpace($modsPath)) {
-    $modsPath = "$env:USERPROFILE\AppData\Roaming\.minecraft\mods"
+    # Check if Minecraft is running (javaw.exe)
+    $mcRunning = Get-Process javaw -ErrorAction SilentlyContinue
+    if ($mcRunning) {
+        Write-Host "[*] Minecraft (javaw.exe) is currently running." -ForegroundColor DarkCyan
+    }
+
+    # 1. Check Standard Path (Vanilla, Lunar, Badlion, Modrinth use this usually)
+    if (Test-Path $defaultPath) {
+        $files = Get-ChildItem $defaultPath -Filter *.jar -ErrorAction SilentlyContinue
+        if ($files.Count -gt 0) {
+            return @{ Path = $defaultPath; Source = "Standard/Lunar/Badlion/Modrinth" }
+        }
+    }
+
+    # 2. Check Feather Client (Unique directory structure)
+    $featherBase = "$env:APPDATA\.feather\profiles"
+    if (Test-Path $featherBase) {
+        # Find the profile with the most recent activity
+        $latestProfile = Get-ChildItem $featherBase -Directory -ErrorAction SilentlyContinue | 
+                         Sort-Object LastWriteTime -Descending | 
+                         Select-Object -First 1
+        
+        if ($latestProfile) {
+            $featherMods = Join-Path $latestProfile.FullName "mods"
+            if (Test-Path $featherMods) {
+                return @{ Path = $featherMods; Source = "Feather Client (Latest Profile)" }
+            }
+        }
+    }
+    
+    # 3. Fallback to Default
+    return @{ Path = $defaultPath; Source = "Default" }
+}
+
+ $detection = Resolve-GamePath
+Write-Host "Auto-detected Client: $($detection.Source)" -ForegroundColor Green
+Write-Host
+
+Write-Host "Path to mods folder (Enter for auto-detected): " -NoNewline
+ $inputPath = Read-Host
+
+if ([string]::IsNullOrWhiteSpace($inputPath)) {
+    $modsPath = $detection.Path
+} else {
+    $modsPath = $inputPath
 }
 
 if (-not (Test-Path $modsPath -PathType Container)) {
